@@ -3,6 +3,7 @@ use trytes::*;
 use search::Search;
 use curl::*;
 use alloc::Vec;
+use core;
 //use collections::String;
 
 trait Offset {
@@ -24,14 +25,14 @@ impl<'a> Offset for &'a mut [BCTrit] {
 
 struct ThreadSearch;
 
-impl<BCTrit> Search<BCTrit> for ThreadSearch {
+impl Search<BCTrit> for ThreadSearch
+{
     fn search(
         trits: &[Trit],
         length: usize,
         group: usize,
         check: fn(&[BCTrit]) -> Option<usize>,
     ) -> Option<Trinary> {
-        let bctrits = trits.into_iter().collect();
         let mut curl = DefaultCurl::default();
         (&mut curl.state[0..3]).offset();
         for _ in 0..group {
@@ -40,15 +41,18 @@ impl<BCTrit> Search<BCTrit> for ThreadSearch {
         let mut index: Option<usize>;
         loop {
             (&mut curl.state[HASH_LENGTH * 2 / 3..HASH_LENGTH]).incr();
-            let curl_copy = curl.clone();
+            let mut curl_copy = curl.clone();
             curl_copy.transform();
             index = check(&curl_copy.state[0..length]);
             if index.is_some() {
                 break;
             }
         }
+
+        let mux = TrinaryDemultiplexer::new(curl.squeeze(HASH_LENGTH).as_slice());
+
         Some(
-            TrinaryDemultiplexer::new(curl.squeeze(HASH_LENGTH).as_slice())[index.unwrap()],
+            mux[index.unwrap()].clone()
         )
     }
 }
